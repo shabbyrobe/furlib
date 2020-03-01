@@ -191,6 +191,14 @@ func escape(s string) string {
 // https://tools.ietf.org/html/rfc6335#section-5.1
 var portEnd = regexp.MustCompile(`:([A-Za-z0-9-]+|\d+)$`)
 
+func MustParseURL(s string) URL {
+	u, err := ParseURL(s)
+	if err != nil {
+		panic(err)
+	}
+	return u
+}
+
 func ParseURL(s string) (gu URL, err error) {
 	u, err := url.Parse(s)
 	if err != nil {

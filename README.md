@@ -1,10 +1,55 @@
 Furlib: Gopher Client/Server in Go
 ==================================
 
+Work-in-progress Gopher client and server.
+
+Client quickstart:
+
+```go
+var client gopher.Client
+response, err := client.Fetch(
+    context.Background(), gopher.MustParseURL("gopher://gopher.floodgap.com/"))
+
+switch response.(type) {
+case *gopher.DirResponse:
+    // handle dir
+case *gopher.TextResponse:
+    // handle text
+case *gopher.BinaryResponse:
+    // handle bin
+}
+```
+
+Server quickstart:
+
+```go
+var mux = gopher.NewMux()
+mux.Handle("/foo", func(ctx context.Context, w ResponseWriter, r *Request) {
+    tw := gopher.NewTextWriter(w, r)
+    defer tw.MustFlush()
+    tw.WriteString("hello!")
+}, nil)
+
+mux.Handle("", func(ctx context.Context, w ResponseWriter, r *Request) {
+    dw := gopher.NewDirWriter(w, r)
+    defer dw.MustFlush()
+    dw.Info("yep")
+    dw.Text("Test!", "/foo")
+}, nil)
+
+var server = gopher.Server{
+    Handler: mux,
+}
+err := server.ListenAndServe(":7070", "")
+```
+
+
 ## Expectation Management
 
-Feel free to use this or take bits from it as you see fit (MIT license == go
-nuts). I won't maintain this to any kind of standard though. This is a
-scratchpad and a bit of fun for me, not a product. Issues may be responded to
+This is a work in progress. The Gopher protocol appears simple, but it's missing
+a lot of mod cons and it is taking time, care and effort to work out how to
+handle things correctly.
+
+This project is a bit of fun for me, not a product. Issues may be responded to
 whenever I happen to get around to them, but PRs are unlikely to be accepted.
 
