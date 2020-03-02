@@ -73,12 +73,12 @@ func (c *Client) dial(ctx context.Context, rq *Request, tlsMode TLSMode) (net.Co
 //
 // Callers must use the reader returned by this function rather than the conn to read
 // the response.
-func (c *Client) send(ctx context.Context, conn net.Conn, rq *Request, at time.Time, interceptErrors bool) (net.Conn, error) {
+func (c *Client) send(ctx context.Context, conn net.Conn, rq *Request, at time.Time, interceptErrors bool) (net.Conn, *ResponseInfo, error) {
 	var rec Recording
 
 	caps, err := c.loadCaps(ctx, rq.url.Hostname, rq.url.Port)
 	if err != nil {
-		return conn, err
+		return conn, nil, err
 	}
 	_ = caps // XXX: not using yet.
 
@@ -88,32 +88,35 @@ func (c *Client) send(ctx context.Context, conn net.Conn, rq *Request, at time.T
 	}
 
 	if err := conn.SetWriteDeadline(at.Add(c.timeoutWrite())); err != nil {
-		return conn, err
+		return conn, nil, err
 	}
 
 	var buf bytes.Buffer
 	if err := rq.buildSelector(&buf); err != nil {
-		return conn, fmt.Errorf("gopher: failed to build selector: %w", err)
+		return conn, nil, fmt.Errorf("gopher: failed to build selector: %w", err)
 	}
 
 	if _, err := conn.Write(buf.Bytes()); err != nil {
 		// XXX: We must make sure to return this error as-is so we can catch and retry in
 		// dialAndSend. We avoid errors.As because it introduces a bucketload of slow.
 		if tlserr, ok := err.(tls.RecordHeaderError); ok {
-			return conn, tlserr
+			return conn, nil, tlserr
 		}
-		return conn, fmt.Errorf("gopher: request selector write error: %w", err)
+		return conn, nil, fmt.Errorf("gopher: request selector write error: %w", err)
 	}
 
 	if body := rq.Body(); body != nil {
 		if _, err := io.Copy(conn, body); err != nil {
-			return conn, err
+			return conn, nil, err
 		}
 	}
 
 	if err := conn.SetReadDeadline(at.Add(c.timeoutRead())); err != nil {
-		return conn, err
+		return conn, nil, err
 	}
+
+	// XXX: This MUST happen before conn is wrapped by any bufferedConns or what-have-you.
+	info := newResponseInfo(conn, rq)
 
 	if interceptErrors {
 		// If the error isn't present in this, we can't detect it:
@@ -137,7 +140,7 @@ func (c *Client) send(ctx context.Context, conn net.Conn, rq *Request, at time.T
 			err = nil
 		}
 		if err != nil {
-			return conn, err
+			return conn, nil, err
 		}
 
 		scratch = scratch[:n]
@@ -149,12 +152,12 @@ func (c *Client) send(ctx context.Context, conn net.Conn, rq *Request, at time.T
 		})
 		if rsErr != nil {
 			rsErr.Raw = scratch
-			return conn, rsErr
+			return conn, nil, rsErr
 		}
 		conn = &bufferedConn{conn, io.MultiReader(bytes.NewReader(scratch), conn)}
 	}
 
-	return conn, nil
+	return conn, info, nil
 }
 
 func (c *Client) loadCaps(ctx context.Context, host string, port string) (caps Caps, err error) {
@@ -170,15 +173,15 @@ func (c *Client) loadCaps(ctx context.Context, host string, port string) (caps C
 	return caps, nil
 }
 
-func (c *Client) dialAndSend(ctx context.Context, rq *Request, at time.Time, interceptErrors bool) (net.Conn, error) {
+func (c *Client) dialAndSend(ctx context.Context, rq *Request, at time.Time, interceptErrors bool) (net.Conn, *ResponseInfo, error) {
 	tlsMode := c.TLSMode.resolve(rq.url.Secure)
 	conn, err := c.dial(ctx, rq, tlsMode)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-retry:
-	rdr, err := c.send(ctx, conn, rq, at, interceptErrors)
+retryTLS:
+	rdr, info, err := c.send(ctx, conn, rq, at, interceptErrors)
 	if err != nil {
 		conn.Close()
 
@@ -186,13 +189,13 @@ retry:
 			tlsMode = TLSDisabled
 			conn, err = c.dial(ctx, rq, tlsMode)
 			if err == nil {
-				goto retry
+				goto retryTLS
 			}
 		}
-		return nil, err
+		return nil, nil, err
 	}
 
-	return rdr, nil
+	return rdr, info, nil
 }
 
 func (c *Client) Fetch(ctx context.Context, rq *Request) (Response, error) {
@@ -217,54 +220,54 @@ func (c *Client) Fetch(ctx context.Context, rq *Request) (Response, error) {
 
 func (c *Client) Search(ctx context.Context, rq *Request) (*DirResponse, error) {
 	start := time.Now()
-	conn, err := c.dialAndSend(ctx, rq, start, !c.DisableErrorIntercept)
+	conn, info, err := c.dialAndSend(ctx, rq, start, !c.DisableErrorIntercept)
 	if err != nil {
 		return nil, err
 	}
-	return NewDirResponse(rq, conn), nil
+	return NewDirResponse(info, conn), nil
 }
 
 func (c *Client) Dir(ctx context.Context, rq *Request) (*DirResponse, error) {
 	start := time.Now()
-	conn, err := c.dialAndSend(ctx, rq, start, !c.DisableErrorIntercept)
+	conn, info, err := c.dialAndSend(ctx, rq, start, !c.DisableErrorIntercept)
 	if err != nil {
 		return nil, fmt.Errorf("gopher: dir request failed: %w", err)
 	}
-	return NewDirResponse(rq, conn), nil
+	return NewDirResponse(info, conn), nil
 }
 
 func (c *Client) Text(ctx context.Context, rq *Request) (*TextResponse, error) {
 	start := time.Now()
-	conn, err := c.dialAndSend(ctx, rq, start, !c.DisableErrorIntercept)
+	conn, info, err := c.dialAndSend(ctx, rq, start, !c.DisableErrorIntercept)
 	if err != nil {
 		return nil, err
 	}
-	return NewTextResponse(rq, conn), nil
+	return NewTextResponse(info, conn), nil
 }
 
 func (c *Client) Binary(ctx context.Context, rq *Request) (*BinaryResponse, error) {
 	start := time.Now()
-	conn, err := c.dialAndSend(ctx, rq, start, !c.DisableErrorIntercept)
+	conn, info, err := c.dialAndSend(ctx, rq, start, !c.DisableErrorIntercept)
 	if err != nil {
 		return nil, err
 	}
-	return NewBinaryResponse(rq, conn), nil
+	return NewBinaryResponse(info, conn), nil
 }
 
 func (c *Client) UUEncoded(ctx context.Context, rq *Request) (*UUEncodedResponse, error) {
 	start := time.Now()
-	conn, err := c.dialAndSend(ctx, rq, start, !c.DisableErrorIntercept)
+	conn, info, err := c.dialAndSend(ctx, rq, start, !c.DisableErrorIntercept)
 	if err != nil {
 		return nil, err
 	}
-	return NewUUEncodedResponse(rq, conn), nil
+	return NewUUEncodedResponse(info, conn), nil
 }
 
 func (c *Client) Raw(ctx context.Context, rq *Request) (Response, error) {
 	start := time.Now()
-	conn, err := c.dialAndSend(ctx, rq, start, false)
+	conn, info, err := c.dialAndSend(ctx, rq, start, false)
 	if err != nil {
 		return nil, err
 	}
-	return NewBinaryResponse(rq, conn), nil
+	return NewBinaryResponse(info, conn), nil
 }

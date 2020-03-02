@@ -13,13 +13,13 @@ type Request struct {
 	body   io.ReadCloser
 	format string
 
-	// When a server accepts an actual connection, this will be set to the remote address.
-	// This field is ignored by the Gopher client.
+	// Server only. When a server accepts an actual connection, this will be set to the
+	// remote address.  This field is ignored by the Gopher client.
 	RemoteAddr *net.TCPAddr
 
-	// Params is free to be set by your Server's Mux implementation. If you have
-	// requirements that this can't satisfy, use the dreaded context.WithValue()
-	// to add what you need.
+	// Server only. Params is free to be set by your Server's Mux implementation. If you
+	// have requirements that this can't satisfy, use the dreaded context.WithValue() to
+	// add what you need.
 	Params Params
 
 	// Server only. SelectorPrefix is added to all generated selectors which are internal

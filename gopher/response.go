@@ -2,7 +2,9 @@ package gopher
 
 import (
 	"bufio"
+	"crypto/tls"
 	"io"
+	"net"
 	"os"
 
 	"github.com/shabbyrobe/furlib/internal/uuencode"
@@ -19,28 +21,49 @@ const (
 
 var lineEnding = []byte{'\r', '\n'}
 
+type ResponseInfo struct {
+	Request *Request
+
+	// TLS contains information about the TLS connection on which the
+	// response was received. It is nil for unencrypted responses.
+	// The pointer is shared between responses and should not be
+	// modified.
+	TLS *tls.ConnectionState
+}
+
+func (ri *ResponseInfo) URL() URL { return ri.Request.url }
+
+func newResponseInfo(conn net.Conn, rq *Request) *ResponseInfo {
+	ri := &ResponseInfo{
+		Request: rq,
+	}
+	if tls, ok := conn.(interface{ ConnectionState() tls.ConnectionState }); ok {
+		cs := tls.ConnectionState()
+		ri.TLS = &cs
+	}
+	return ri
+}
+
 type Response interface {
 	Reader() io.ReadCloser
-	Status() Status
-	Request() *Request
+	Info() *ResponseInfo
 	Class() ResponseClass
 	Close() error
 }
 
 type BinaryResponse struct {
-	rq    *Request
+	info  *ResponseInfo
 	inner io.ReadCloser
 }
 
 var _ Response = &BinaryResponse{}
 
-func NewBinaryResponse(rq *Request, rdr io.ReadCloser) *BinaryResponse {
-	return &BinaryResponse{rq: rq, inner: rdr}
+func NewBinaryResponse(info *ResponseInfo, rdr io.ReadCloser) *BinaryResponse {
+	return &BinaryResponse{info: info, inner: rdr}
 }
 
-func (br *BinaryResponse) Request() *Request     { return br.rq }
 func (br *BinaryResponse) Class() ResponseClass  { return BinaryClass }
-func (br *BinaryResponse) Status() Status        { return OK }
+func (br *BinaryResponse) Info() *ResponseInfo   { return br.info }
 func (br *BinaryResponse) Reader() io.ReadCloser { return br }
 func (br *BinaryResponse) Close() error          { return br.inner.Close() }
 
@@ -49,46 +72,44 @@ func (br *BinaryResponse) Read(b []byte) (n int, err error) {
 }
 
 type UUEncodedResponse struct {
-	rq  *Request
-	uu  *uuencode.Reader
-	cls io.Closer
+	info *ResponseInfo
+	uu   *uuencode.Reader
+	cls  io.Closer
 }
 
 var _ Response = &UUEncodedResponse{}
 
-func NewUUEncodedResponse(rq *Request, rdr io.ReadCloser) *UUEncodedResponse {
+func NewUUEncodedResponse(info *ResponseInfo, rdr io.ReadCloser) *UUEncodedResponse {
 	uu := uuencode.NewReader(NewTextReader(rdr), nil)
-	return &UUEncodedResponse{rq: rq, uu: uu, cls: rdr}
+	return &UUEncodedResponse{info: info, uu: uu, cls: rdr}
 }
 
 func (br *UUEncodedResponse) File() (string, bool)      { return br.uu.File() }
 func (br *UUEncodedResponse) Mode() (os.FileMode, bool) { return br.uu.Mode() }
 
-func (br *UUEncodedResponse) Request() *Request     { return br.rq }
 func (br *UUEncodedResponse) Class() ResponseClass  { return BinaryClass }
+func (br *UUEncodedResponse) Info() *ResponseInfo   { return br.info }
 func (br *UUEncodedResponse) Reader() io.ReadCloser { return br }
 func (br *UUEncodedResponse) Close() error          { return br.cls.Close() }
-func (br *UUEncodedResponse) Status() Status        { return OK }
 
 func (br *UUEncodedResponse) Read(b []byte) (n int, err error) {
 	return br.uu.Read(b)
 }
 
 type TextResponse struct {
-	rdr io.Reader
-	rq  *Request
-	cls io.ReadCloser
+	info *ResponseInfo
+	rdr  io.Reader
+	cls  io.ReadCloser
 }
 
 var _ Response = &TextResponse{}
 
-func NewTextResponse(rq *Request, rdr io.ReadCloser) *TextResponse {
-	return &TextResponse{rq: rq, rdr: NewTextReader(rdr), cls: rdr}
+func NewTextResponse(info *ResponseInfo, rdr io.ReadCloser) *TextResponse {
+	return &TextResponse{info: info, rdr: NewTextReader(rdr), cls: rdr}
 }
 
 func (br *TextResponse) Class() ResponseClass  { return TextClass }
-func (br *TextResponse) Request() *Request     { return br.rq }
-func (br *TextResponse) Status() Status        { return OK }
+func (br *TextResponse) Info() *ResponseInfo   { return br.info }
 func (br *TextResponse) Reader() io.ReadCloser { return br }
 func (br *TextResponse) Close() error          { return br.cls.Close() }
 
@@ -97,7 +118,7 @@ func (br *TextResponse) Read(b []byte) (n int, err error) {
 }
 
 type DirResponse struct {
-	rq   *Request
+	info *ResponseInfo
 	cls  io.Closer
 	scn  *bufio.Scanner
 	rdr  io.Reader
@@ -109,20 +130,19 @@ type DirResponse struct {
 
 var _ Response = &DirResponse{}
 
-func NewDirResponse(rq *Request, rdr io.ReadCloser) *DirResponse {
+func NewDirResponse(info *ResponseInfo, rdr io.ReadCloser) *DirResponse {
 	dot := NewTextReader(rdr)
 	scn := bufio.NewScanner(dot)
 	return &DirResponse{
-		rq:  rq,
-		cls: rdr,
-		scn: scn,
-		rdr: dot,
+		info: info,
+		cls:  rdr,
+		scn:  scn,
+		rdr:  dot,
 	}
 }
 
-func (br *DirResponse) Status() Status       { return OK }
 func (br *DirResponse) Class() ResponseClass { return DirClass }
-func (br *DirResponse) Request() *Request    { return br.rq }
+func (br *DirResponse) Info() *ResponseInfo  { return br.info }
 
 func (br *DirResponse) Reader() io.ReadCloser {
 	return &readCloser{
