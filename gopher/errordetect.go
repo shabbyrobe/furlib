@@ -14,6 +14,9 @@ var (
 type ErrFactory func(status Status, msg string, confidence float64) *Error
 
 func DetectError(data []byte, errFactory ErrFactory) *Error {
+	// TODO: If we know the server software and the caps in here we might be able
+	// to avoid the slowness of all these checks.
+
 	const firstLineMax = 200
 
 	dlen := len(data)
@@ -52,6 +55,15 @@ func DetectError(data []byte, errFactory ErrFactory) *Error {
 		status, msg, found := extractDirentError(data)
 		if found {
 			return errFactory(status, msg, 0.9)
+		}
+	}
+
+	// If the first line is an 'i' line, try to check a set number of 'i' lines against the
+	// well-known error prefixes:
+	if data[0] == 'i' && firstNl > 0 {
+		status, msg, found, confidence := extractDirentInfoLineError(data)
+		if found {
+			return errFactory(status, msg, confidence)
 		} else {
 			return nil
 		}
@@ -175,6 +187,47 @@ func extractDirentError(data []byte) (status Status, msg string, found bool) {
 	return 0, "", false
 }
 
+func extractDirentInfoLineError(data []byte) (status Status, msg string, found bool, confidence float64) {
+	dsz := len(data)
+
+	var dirent Dirent
+	var lnum = 1
+	var limit = 2
+
+	for idx, start := 0, 0; idx >= 0 && lnum <= limit && start < dsz; lnum++ {
+		idx = bytes.IndexByte(data[start:], '\n')
+		var line []byte
+		if idx < 0 {
+			line = data[start:]
+		} else {
+			line = data[start : start+idx]
+		}
+
+		start += idx + 1
+
+		if line[0] != 'i' {
+			return 0, "", false, 0
+		}
+
+		line = errorTrimRightCRLF(line, len(line))
+		if err := parseDirent(string(line), lnum, &dirent); err != nil {
+			// XXX: if this is the last line in 'data', we may be trying to read a
+			// truncated dirent.
+			return 0, "", false, 0
+		}
+
+		if found, _ := errorPrefixMatcher.FindString(dirent.Display); found {
+			confidence := 0.5
+			if errorPatternLoose.MatchString(dirent.Display) {
+				confidence = 0.8
+			}
+			return StatusGeneralError, dirent.Display, true, confidence
+		}
+	}
+
+	return 0, "", false, 0
+}
+
 var (
 	errorPrefixMatcher = errorMatcherBuild([][]byte{
 		[]byte("an error occurred:"),
@@ -186,6 +239,8 @@ var (
 		`(?i)` +
 		`(` +
 		`\bnot found\b` +
+		`|` +
+		`\bforbidden\b` +
 		`|` +
 		`resource .*? does not exist` +
 		`)` +
@@ -216,6 +271,23 @@ func (node *errorMatcherNode) Find(buf []byte) (found bool, n int) {
 	cur := node
 	for idx, b := range buf {
 		b = caseFold[b]
+		if cur.next[b] == nil {
+			break
+		}
+		cur = cur.next[b]
+		if cur.match {
+			found = true
+			n = idx
+		}
+	}
+
+	return found, n
+}
+
+func (node *errorMatcherNode) FindString(s string) (found bool, n int) {
+	cur := node
+	for idx := 0; idx < len(s); idx++ {
+		b := caseFold[s[idx]]
 		if cur.next[b] == nil {
 			break
 		}

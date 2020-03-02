@@ -33,6 +33,7 @@ func TestErrorDetect(t *testing.T) {
 		{`Error: resource caps.txt does not exist on example.com`},
 		{`File: '/caps.txt' not found.`},
 		{`Error: 404 Not Found\n\nThe requested URL was not found on the server. If you entered the URL\nmanually please check your spelling and try again.`},
+
 		{`` +
 			`i   ____            _       ____      _ _` + "\n" +
 			`i  |  _ \ _   _ ___| |_ ___|  _ \  __| | | __` + "\n" +
@@ -43,6 +44,13 @@ func TestErrorDetect(t *testing.T) {
 			`i ` + "\n" +
 			`i ` + "\n" +
 			`3Sorry! I could not find caps.txt`,
+		},
+
+		{`` + // gopher://mozz.us:7005/1/error/403/menu
+			`iError: 403 Forbidden	fake	example.com	0` + "\r\n" +
+			`i	fake	example.com	0` + "\r\n" +
+			`iYou don't have the permission to access the requested resource. It is	fake	example.com	0` + "\r\n" +
+			`ieither read-protected or not readable by the server.	fake	example.com	0` + "\r\n",
 		},
 	} {
 		t.Run(fmt.Sprintf("%d", idx), func(t *testing.T) {
