@@ -53,6 +53,10 @@ type Server struct {
 	ReadSelectorTimeout time.Duration
 	TLSConfig           *tls.Config
 
+	// This will be set in the Request so that writers like DirWriter can build prefixed
+	// selectors with zero extra config.
+	SelectorPrefix string
+
 	conns     map[net.Conn]struct{}
 	listeners map[net.Listener]struct{}
 	lock      sync.Mutex
@@ -368,6 +372,7 @@ found:
 	}
 
 	rq := NewRequest(url, body)
+	rq.SelectorPrefix = c.srv.SelectorPrefix
 	rq.RemoteAddr = c.rwc.RemoteAddr().(*net.TCPAddr)
 
 	return rq, nil

@@ -21,6 +21,11 @@ type Request struct {
 	// requirements that this can't satisfy, use the dreaded context.WithValue()
 	// to add what you need.
 	Params Params
+
+	// Server only. SelectorPrefix is added to all generated selectors which are internal
+	// to this server. Comes from the Server struct. Useful for things like configurable
+	// sites deployable at different selector bases.
+	SelectorPrefix string
 }
 
 func NewRequest(url URL, body io.Reader) *Request {

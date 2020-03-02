@@ -74,6 +74,7 @@ type DirWriter struct {
 	bufw *bufio.Writer
 	host string
 	port string
+	base string
 }
 
 func NewDirWriter(w io.Writer, rq *Request) *DirWriter {
@@ -86,6 +87,7 @@ func NewDirWriter(w io.Writer, rq *Request) *DirWriter {
 		bufw: bufio.NewWriter(w),
 		host: u.Hostname,
 		port: strconv.FormatInt(int64(port), 10),
+		base: rq.SelectorPrefix,
 	}
 }
 
@@ -148,7 +150,11 @@ func (dw *DirWriter) Selector(i ItemType, disp, sel string) error {
 	bufw.WriteByte(byte(i))
 	bufw.WriteString(disp)
 	bufw.WriteByte('\t')
-	bufw.WriteString(sel)
+	if dw.base == "" {
+		bufw.WriteString(sel)
+	} else {
+		bufw.WriteString(dw.base + sel)
+	}
 	bufw.WriteByte('\t')
 	bufw.WriteString(dw.host)
 	bufw.WriteByte('\t')
@@ -162,7 +168,11 @@ func (dw *DirWriter) Plus(i ItemType, disp, sel string) error {
 	bufw.WriteByte(byte(i))
 	bufw.WriteString(disp)
 	bufw.WriteByte('\t')
-	bufw.WriteString(sel)
+	if dw.base == "" {
+		bufw.WriteString(sel)
+	} else {
+		bufw.WriteString(dw.base + sel)
+	}
 	bufw.WriteByte('\t')
 	bufw.WriteString(dw.host)
 	bufw.WriteByte('\t')
