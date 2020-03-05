@@ -124,8 +124,6 @@ type DirResponse struct {
 	rdr  io.Reader
 	err  error
 	line int
-
-	pos, n int
 }
 
 var _ Response = &DirResponse{}
@@ -179,7 +177,7 @@ retry:
 		goto retry
 	}
 
-	if err := parseDirent(txt, br.line, dir); err != nil {
+	if err := parseDirent(txt, br.line, dir, 0); err != nil {
 		br.err = err
 		return false
 	}

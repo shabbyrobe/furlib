@@ -174,7 +174,7 @@ func (c *Client) loadCaps(ctx context.Context, host string, port string) (caps C
 }
 
 func (c *Client) dialAndSend(ctx context.Context, rq *Request, at time.Time, interceptErrors bool) (net.Conn, *ResponseInfo, error) {
-	tlsMode := c.TLSMode.resolve(rq.url.Secure)
+	tlsMode := c.TLSMode.resolve(rq.url.IsSecure())
 	conn, err := c.dial(ctx, rq, tlsMode)
 	if err != nil {
 		return nil, nil, err

@@ -8,14 +8,12 @@ import (
 )
 
 type Dirent struct {
-	ItemType ItemType
-	Display  string
-	URL      URL
-	Plus     bool
+	ItemType ItemType `json:"type"`
+	Display  string   `json:"display"`
+	URL      URL      `json:"url,omitempty"`
+	Plus     bool     `json:"plus,omitempty"`
 
-	Valid bool
-	Error string
-	Raw   string
+	Raw string `json:"-"`
 }
 
 func (d *Dirent) write(w *bufio.Writer) error {
@@ -35,13 +33,18 @@ func (d *Dirent) write(w *bufio.Writer) error {
 	return err
 }
 
-func parseDirent(txt string, line int, dir *Dirent) error {
+type direntFlag int
+
+const (
+	direntHostOptional = 1 << iota
+)
+
+func parseDirent(txt string, line int, dir *Dirent, flag direntFlag) error {
 	tsz := len(txt)
 
 	dir.URL = URL{}
 	dir.ItemType = ItemType(txt[0])
 	dir.URL.ItemType = ItemType(txt[0])
-	dir.Valid = true
 	dir.Raw = txt
 
 	start := 1
@@ -96,6 +99,9 @@ func parseDirent(txt string, line int, dir *Dirent) error {
 	}
 
 	fieldLimit := 4
+	if flag&direntHostOptional != 0 {
+		fieldLimit = 2
+	}
 	if dir.ItemType == Info || dir.ItemType == ItemError {
 		// XXX: Lots of servers don't fill out the extra fields for 'i' lines.
 		// Some don't fill it out for '3' lines, either.

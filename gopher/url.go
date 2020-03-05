@@ -8,13 +8,13 @@ import (
 	"strings"
 )
 
-// URL implements most of the Gopher URL scheme (excluding the crazy
+// URL implements most of the Gopher URL scheme (excluding some of the largely unused
 // Gopher+ stuff).
 //
 // http://tools.ietf.org/html/rfc4266
 // https://www.w3.org/Addressing/URL/4_1_Gopher+.html
 type URL struct {
-	Secure   bool
+	Scheme   string
 	Hostname string
 	Port     string
 	Root     bool
@@ -27,6 +27,24 @@ type URL struct {
 	Search   string
 }
 
+var urlZero URL
+
+func (u URL) IsEmpty() bool {
+	return u == urlZero
+}
+
+// IsAbs reports whether the URL is absolute.
+// Absolute means that it has a non-empty scheme.
+func (u URL) IsAbs() bool {
+	return u.Scheme != ""
+}
+
+func (u URL) IsSecure() bool {
+	return u.Scheme == "gophers"
+}
+
+// AsMetaItem returns a new URL with the Search portion set to a request for
+// an item's metadata.
 func (u URL) AsMetaItem(records ...string) URL {
 	if len(records) == 0 {
 		u.Search = string(MetaItem)
@@ -36,6 +54,8 @@ func (u URL) AsMetaItem(records ...string) URL {
 	return u
 }
 
+// AsMetaDir returns a new URL with the Search portion set to a request for
+// a directory's metadata.
 func (u URL) AsMetaDir(records ...string) URL {
 	if len(records) == 0 {
 		u.Search = string(MetaDir)
@@ -45,7 +65,11 @@ func (u URL) AsMetaDir(records ...string) URL {
 	return u
 }
 
-// https://en.wikipedia.org/wiki/Gopher_(protocol)#URL_links
+// WWW returns a http URL if the selector follows the Gopher "URL link" convention.
+// For example: 'URL:http://gopher.quux.org/'
+//
+// URL Links are described in section 11 of the GopherII spec.
+//
 func (u URL) WWW() (url string, ok bool) {
 	sel := u.Selector
 	if u.ItemType == HTML && len(sel) >= 5 {
@@ -86,6 +110,8 @@ func (u URL) MetaType() MetaType {
 	return MetaNone
 }
 
+// CanFetch returns true if (a best effort guess determines that) it is possible for a
+// client to fetch this URL.
 func (u URL) CanFetch() bool {
 	return u.ItemType.CanFetch() && !IsWellKnownDummyHostname(u.Hostname)
 }
@@ -98,13 +124,12 @@ func (u URL) Host() string {
 	return net.JoinHostPort(u.Hostname, p)
 }
 
-func (u URL) URL() URL { return u }
-
 func (u URL) String() string {
 	var out strings.Builder
-	if u.Secure {
-		out.WriteString("gophers://")
-	} else {
+	if u.Scheme != "" {
+		out.WriteString(u.Scheme)
+		out.WriteString("://")
+	} else if u.Hostname != "" {
 		out.WriteString("gopher://")
 	}
 
@@ -154,6 +179,7 @@ func (u *URL) UnmarshalText(b []byte) error {
 func (u URL) Parts() map[string]interface{} {
 	// XXX: this is just here to make it easier to dump
 	m := make(map[string]interface{}, 7)
+	m["Scheme"] = u.Scheme
 	m["Hostname"] = u.Hostname
 	m["Port"] = u.Port
 	m["Root"] = u.Root
@@ -163,6 +189,11 @@ func (u URL) Parts() map[string]interface{} {
 	return m
 }
 
+// IsWellKnownDummyHostname compares the hostname against a set of well-known
+// dummy values. Gopher servers use a hotch-potch of values for dummy hostnames.
+//
+// Dear Gopher server authors: please use 'invalid' (or, somewhat less ideally, 'example')
+// as per RFC2606.
 func IsWellKnownDummyHostname(s string) bool {
 	s = strings.TrimSpace(s)
 
@@ -200,30 +231,20 @@ func MustParseURL(s string) URL {
 }
 
 func ParseURL(s string) (gu URL, err error) {
+	// FIXME: interprets "localhost:7070" as "scheme:opaque"
 	u, err := url.Parse(s)
 	if err != nil {
 		return URL{}, err
 	}
 
-	// FIXME: interprets "localhost:7070" as "scheme:opaque"
-
 	if u.Fragment != "" || u.Opaque != "" || u.User != nil {
 		return URL{}, fmt.Errorf("gopher: invalid URL %q", u)
 	}
 
-	if u.Scheme == "" {
-		u, err = url.Parse("gopher://" + u.String())
-		if err != nil {
-			return URL{}, err
-		}
-	} else {
-		switch u.Scheme {
-		case "gopher":
-		case "gophers":
-			gu.Secure = true
-		default:
-			return URL{}, fmt.Errorf("gopher: invalid URL %q", u)
-		}
+	switch u.Scheme {
+	case "gopher", "gophers", "":
+	default:
+		return URL{}, fmt.Errorf("gopher: invalid URL %q", u)
 	}
 
 	h := u.Host
@@ -234,6 +255,7 @@ func ParseURL(s string) (gu URL, err error) {
 		h += ":70"
 	}
 
+	gu.Scheme = u.Scheme
 	gu.Hostname, gu.Port, err = net.SplitHostPort(h)
 	if err != nil {
 		return URL{}, err
