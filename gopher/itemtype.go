@@ -1,6 +1,9 @@
 package gopher
 
-import "strconv"
+import (
+	"fmt"
+	"strconv"
+)
 
 type ItemType byte
 
@@ -78,6 +81,18 @@ func (i ItemType) IsSearch() bool {
 
 func (i ItemType) IsBinary() bool {
 	return isBinary[i]
+}
+
+func (i ItemType) MarshalText() (text []byte, err error) {
+	return []byte{byte(i)}, nil
+}
+
+func (i *ItemType) UnmarshalText(text []byte) (err error) {
+	if len(text) != 1 {
+		return fmt.Errorf("gopher: item type must be 1 and only 1 character, found %d", len(text))
+	}
+	*i = ItemType(text[0])
+	return nil
 }
 
 var isBinary = [256]bool{
