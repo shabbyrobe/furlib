@@ -1,9 +1,20 @@
-Furlib: Gopher Client/Server in Go
-==================================
+Furlib: Gopher Client/Server for Go
+===================================
 
-Work-in-progress Gopher client and server.
+Furlib is a work-in-progress Gopher client and server library for Go. Furlib
+tries to keep things as close as reasonable to the shape of the http stdlib
+package.
 
-Client quickstart:
+## Expectation Management
+
+This is a work in progress. The Gopher protocol appears simple, but it's missing
+a lot of mod cons and it is taking time, care and effort to work out how to
+handle things correctly.
+
+This project is a bit of fun for me, not a product. Issues may be responded to
+whenever I happen to get around to them, but PRs are unlikely to be accepted.
+
+## Client quickstart
 
 ```go
 var client gopher.Client
@@ -20,7 +31,7 @@ case *gopher.BinaryResponse:
 }
 ```
 
-Server quickstart:
+## Server quickstart:
 
 ```go
 var mux = gopher.NewMux()
@@ -42,14 +53,4 @@ var server = gopher.Server{
 }
 err := server.ListenAndServe(":7070", "")
 ```
-
-
-## Expectation Management
-
-This is a work in progress. The Gopher protocol appears simple, but it's missing
-a lot of mod cons and it is taking time, care and effort to work out how to
-handle things correctly.
-
-This project is a bit of fun for me, not a product. Issues may be responded to
-whenever I happen to get around to them, but PRs are unlikely to be accepted.
 
