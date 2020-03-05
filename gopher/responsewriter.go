@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"strconv"
+	"strings"
 )
 
 type ResponseWriter interface {
@@ -75,6 +76,7 @@ type DirWriter struct {
 	host string
 	port string
 	base string
+	err  error
 }
 
 func NewDirWriter(w io.Writer, rq *Request) *DirWriter {
@@ -91,8 +93,15 @@ func NewDirWriter(w io.Writer, rq *Request) *DirWriter {
 	}
 }
 
+func (dw *DirWriter) check(err error) error {
+	if err != nil && dw.err == nil {
+		dw.err = err
+	}
+	return err
+}
+
 func (dw *DirWriter) Dirent(dirent *Dirent) error {
-	return dirent.write(dw.bufw)
+	return dw.check(dirent.write(dw.bufw))
 }
 
 // Info writes an 'i' line to the directory. It is safe to ignore the returned
@@ -108,7 +117,7 @@ func (dw *DirWriter) Info(disp string) error {
 	bufw.WriteByte('\t')
 	bufw.WriteByte('0')
 	_, err := bufw.Write(crlf)
-	return err
+	return dw.check(err)
 }
 
 func (dw *DirWriter) RemoteSelector(i ItemType, disp, sel string, host string, port int) error {
@@ -122,7 +131,7 @@ func (dw *DirWriter) RemoteSelector(i ItemType, disp, sel string, host string, p
 	bufw.WriteByte('\t')
 	bufw.WriteString(strconv.FormatInt(int64(port), 10))
 	_, err := bufw.Write(crlf)
-	return err
+	return dw.check(err)
 }
 
 func (dw *DirWriter) Text(disp, sel string) error {
@@ -135,6 +144,18 @@ func (dw *DirWriter) Root(disp string) error {
 
 func (dw *DirWriter) Dir(disp, sel string) error {
 	return dw.Selector(Dir, disp, sel)
+}
+
+// WWW writes a dirent with a selector for a standard WWW URL.
+//
+// URL Links are described in section 11 of the GopherII spec.
+//
+// WWW returns an error if 'url' does not start with 'http://' or 'https://'.
+func (dw *DirWriter) WWW(disp, url string) error {
+	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "http://") {
+		return dw.check(fmt.Errorf("gopher: dirent www failed: URL %q does not start with http or https", url))
+	}
+	return dw.Selector(Dir, disp, "URL:"+url)
 }
 
 func (dw *DirWriter) Binary(disp, sel string) error {
@@ -160,7 +181,7 @@ func (dw *DirWriter) Selector(i ItemType, disp, sel string) error {
 	bufw.WriteByte('\t')
 	bufw.WriteString(dw.port)
 	_, err := bufw.Write(crlf)
-	return err
+	return dw.check(err)
 }
 
 func (dw *DirWriter) Plus(i ItemType, disp, sel string) error {
@@ -180,7 +201,7 @@ func (dw *DirWriter) Plus(i ItemType, disp, sel string) error {
 	bufw.WriteByte('\t')
 	bufw.WriteByte('+')
 	_, err := bufw.Write(crlf)
-	return err
+	return dw.check(err)
 }
 
 func (dw *DirWriter) Error(disp string) error {
@@ -194,12 +215,15 @@ func (dw *DirWriter) Error(disp string) error {
 	bufw.WriteByte('\t')
 	bufw.WriteByte('0')
 	_, err := bufw.Write(crlf)
-	return err
+	return dw.check(err)
 }
 
 func (dw *DirWriter) Flush() error {
+	if dw.err != nil {
+		return dw.err
+	}
 	dw.bufw.Write(dotTerminator)
-	return dw.bufw.Flush()
+	return dw.check(dw.bufw.Flush())
 }
 
 func (dw *DirWriter) MustFlush() { MustFlush(dw) }

@@ -36,7 +36,7 @@ type MetaWriter interface {
 	// If the Request is invalid, MetaError() should be called once and only
 	// once. No other calls to write Info or Records are valid if MetaError()
 	// has been called.
-	MetaError(code Status, msgfmt string)
+	MetaError(code Status, msg string)
 
 	// Write an entire record with a string value:
 	WriteRecord(record string, value string) (ok bool)
