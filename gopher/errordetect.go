@@ -89,6 +89,7 @@ func extractGopherIIError(data []byte) (status Status, msg string, found bool) {
 		stateHyphen1 = iota
 		stateHyphen2
 		stateStatus
+		stateMessageLF
 		stateMessage
 		stateEndLF
 	)
@@ -113,11 +114,18 @@ func extractGopherIIError(data []byte) (status Status, msg string, found bool) {
 			}
 
 		case stateStatus:
-			if c >= '0' || c <= '9' {
+			if c >= '0' && c <= '9' {
 				status = status*10 + Status(c) - '0'
-				msgStart = idx + 1
-			} else if c == '\t' {
+			} else if c == '\r' {
+				state = stateMessageLF
+			} else {
+				return 0, "", false
+			}
+
+		case stateMessageLF:
+			if c == '\n' {
 				state = stateMessage
+				msgStart = idx + 1
 			} else {
 				return 0, "", false
 			}

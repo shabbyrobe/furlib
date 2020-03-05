@@ -33,6 +33,7 @@ func TestErrorDetect(t *testing.T) {
 		{`Error: resource caps.txt does not exist on example.com`},
 		{`File: '/caps.txt' not found.`},
 		{`Error: 404 Not Found\n\nThe requested URL was not found on the server. If you entered the URL\nmanually please check your spelling and try again.`},
+		{"--404\r\nNot Found\r\n.\r\n"},
 
 		{`` +
 			`i   ____            _       ____      _ _` + "\n" +
@@ -59,6 +60,30 @@ func TestErrorDetect(t *testing.T) {
 			}
 			if DetectError([]byte(tc.in), fn) == nil {
 				t.Fatal(tc.in)
+			}
+		})
+	}
+}
+
+func TestExtractGopherII(t *testing.T) {
+	for idx, tc := range []struct {
+		in     string
+		status Status
+		msg    string
+		found  bool
+	}{
+		{"--404\r\nNot Found\r\n.\r\n", StatusNotFound, "Not Found", true},
+	} {
+		t.Run(fmt.Sprintf("%d", idx), func(t *testing.T) {
+			s, m, f := extractGopherIIError([]byte(tc.in))
+			if f != tc.found {
+				t.Fatal()
+			}
+			if s != tc.status {
+				t.Fatal(s)
+			}
+			if m != tc.msg {
+				t.Fatal()
 			}
 		})
 	}
