@@ -65,28 +65,6 @@ func (u URL) AsMetaDir(records ...string) URL {
 	return u
 }
 
-// WWW returns a http URL if the selector follows the Gopher "URL link" convention.
-// For example: 'URL:http://gopher.quux.org/'
-//
-// URL Links are described in section 11 of the GopherII spec.
-//
-func (u URL) WWW() (url string, ok bool) {
-	sel := u.Selector
-	if u.ItemType == HTML && len(sel) >= 5 {
-		if sel[0] == '/' {
-			sel = sel[1:]
-		}
-		if (sel[0] == 'U' || sel[0] == 'u') &&
-			(sel[1] == 'R' || sel[1] == 'r') &&
-			(sel[2] == 'L' || sel[2] == 'l') &&
-			sel[3] == ':' {
-			return sel[4:], true
-		}
-	}
-
-	return "", false
-}
-
 func (u URL) IsMeta() bool {
 	// A GopherIIbis client may request the metadata for a specific selector
 	// by sending a string in the following form:
