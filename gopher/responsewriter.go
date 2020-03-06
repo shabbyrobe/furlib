@@ -57,10 +57,10 @@ func (tw *TextWriter) Write(b []byte) (n int, err error) {
 	s := 0
 	for i := 0; i < blen; i++ {
 		if b[i] == '\n' && tw.last != '\r' {
-			tw.bufw.Write(crlf)
 			if _, err := tw.bufw.Write(b[s:i]); err != nil {
 				return s, err
 			}
+			tw.bufw.Write(crlf)
 			s = i + 1
 		}
 		tw.last = b[i]
