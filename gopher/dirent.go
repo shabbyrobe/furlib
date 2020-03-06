@@ -10,21 +10,25 @@ import (
 type Dirent struct {
 	ItemType ItemType `json:"type"`
 	Display  string   `json:"display"`
-	URL      URL      `json:"url,omitempty"`
+	Selector string   `json:"selector"`
+	Hostname string   `json:"host,omitempty"`
+	Port     string   `json:"port,omitempty"`
 	Plus     bool     `json:"plus,omitempty"`
 
 	Raw string `json:"-"`
 }
 
+var zeroDirent Dirent
+
 func (d *Dirent) write(w *bufio.Writer) error {
 	w.WriteByte(byte(d.ItemType))
 	w.WriteString(d.Display)
 	w.WriteByte('\t')
-	w.WriteString(d.URL.Selector)
+	w.WriteString(d.Selector)
 	w.WriteByte('\t')
-	w.WriteString(d.URL.Hostname)
+	w.WriteString(d.Hostname)
 	w.WriteByte('\t')
-	w.WriteString(d.URL.Port)
+	w.WriteString(d.Port)
 	if d.Plus {
 		w.WriteByte('\t')
 		w.WriteByte('+')
@@ -33,18 +37,35 @@ func (d *Dirent) write(w *bufio.Writer) error {
 	return err
 }
 
+func (d *Dirent) URL() URL {
+	var u = URL{Scheme: "gopher"}
+	d.PopulateURL(&u)
+	return u
+}
+
+func (d *Dirent) PopulateURL(u *URL) {
+	u.ItemType = d.ItemType
+	u.Selector = d.Selector
+	u.Hostname = d.Hostname
+	u.Port = d.Port
+}
+
 type direntFlag int
 
 const (
 	direntHostOptional = 1 << iota
+	direntNoValidatePort
 )
 
 func parseDirent(txt string, line int, dir *Dirent, flag direntFlag) error {
+	if len(txt) == 0 {
+		return fmt.Errorf("gopher: empty dirent at line %d", line)
+	}
+
 	tsz := len(txt)
 
-	dir.URL = URL{}
+	*dir = zeroDirent
 	dir.ItemType = ItemType(txt[0])
-	dir.URL.ItemType = ItemType(txt[0])
 	dir.Raw = txt
 
 	start := 1
@@ -57,10 +78,10 @@ func parseDirent(txt string, line int, dir *Dirent, flag direntFlag) error {
 				dir.Display = txt[start:i]
 				field, start = field+1, i+1
 			case 1:
-				dir.URL.Selector = txt[start:i]
+				dir.Selector = txt[start:i]
 				field, start = field+1, i+1
 			case 2:
-				dir.URL.Hostname = txt[start:i]
+				dir.Hostname = txt[start:i]
 				field, start = field+1, i+1
 
 			case 3:
@@ -77,10 +98,12 @@ func parseDirent(txt string, line int, dir *Dirent, flag direntFlag) error {
 				// valid.
 				ps := strings.TrimSpace(txt[start:i])
 				if ps != "" {
-					if _, err := strconv.ParseInt(ps, 10, 16); err != nil {
-						return fmt.Errorf("gopher: unexpected port %q at line %d: %w", ps, line, err)
+					if flag&direntNoValidatePort == 0 {
+						if _, err := strconv.ParseInt(ps, 10, 16); err != nil {
+							return fmt.Errorf("gopher: unexpected port %q at line %d: %w", ps, line, err)
+						}
 					}
-					dir.URL.Port = ps
+					dir.Port = ps
 				}
 				field, start = field+1, i+1
 
