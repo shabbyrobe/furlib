@@ -3,6 +3,7 @@ package gopher
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 )
@@ -17,6 +18,13 @@ type Dirent struct {
 
 	Raw string `json:"-"`
 }
+
+type DirentFlag int
+
+const (
+	DirentHostOptional = 1 << iota
+	direntNoValidatePort
+)
 
 var zeroDirent Dirent
 
@@ -74,14 +82,7 @@ func (d *Dirent) PopulateURL(u *URL) {
 	u.Port = d.Port
 }
 
-type direntFlag int
-
-const (
-	direntHostOptional = 1 << iota
-	direntNoValidatePort
-)
-
-func parseDirent(txt string, line int, dir *Dirent, flag direntFlag) error {
+func parseDirent(txt string, line int, dir *Dirent, flag DirentFlag) error {
 	if len(txt) == 0 {
 		return fmt.Errorf("gopher: empty dirent at line %d", line)
 	}
@@ -146,7 +147,7 @@ func parseDirent(txt string, line int, dir *Dirent, flag direntFlag) error {
 	}
 
 	fieldLimit := 4
-	if flag&direntHostOptional != 0 {
+	if flag&DirentHostOptional != 0 {
 		fieldLimit = 2
 	}
 	if dir.ItemType == Info || dir.ItemType == ItemError {
@@ -160,4 +161,50 @@ func parseDirent(txt string, line int, dir *Dirent, flag direntFlag) error {
 	}
 
 	return nil
+}
+
+type DirReader struct {
+	scn  *bufio.Scanner
+	rdr  io.Reader
+	err  error
+	line int
+	Flag DirentFlag
+}
+
+func NewDirReader(rdr io.Reader) *DirReader {
+	dot := NewTextReader(rdr)
+	scn := bufio.NewScanner(dot)
+	return &DirReader{
+		scn: scn,
+		rdr: dot,
+	}
+}
+
+func (br *DirReader) ReadErr() error {
+	return br.err
+}
+
+func (br *DirReader) Read(dir *Dirent) bool {
+	if br.err != nil {
+		return false
+	}
+
+retry:
+	if !br.scn.Scan() {
+		br.err = br.scn.Err()
+		return false
+	}
+	br.line++
+
+	txt := br.scn.Text()
+	if len(txt) == 0 {
+		goto retry
+	}
+
+	if err := parseDirent(txt, br.line, dir, br.Flag); err != nil {
+		br.err = err
+		return false
+	}
+
+	return true
 }

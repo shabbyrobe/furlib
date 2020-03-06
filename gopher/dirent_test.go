@@ -10,7 +10,7 @@ func TestParseDirent(t *testing.T) {
 	for idx, tc := range []struct {
 		in   string
 		out  Dirent
-		flag direntFlag
+		flag DirentFlag
 	}{
 		{ // All fields set.
 			in:  "0foo\tbar\tbaz\t70",
@@ -31,12 +31,12 @@ func TestParseDirent(t *testing.T) {
 		{ // Port optional with flag
 			in:   "0a\tb\tc",
 			out:  Dirent{ItemType: Text, Display: "a", Selector: "b", Hostname: "c"},
-			flag: direntHostOptional,
+			flag: DirentHostOptional,
 		},
 		{ // Host+port optional with flag
 			in:   "0a\tb",
 			out:  Dirent{ItemType: Text, Display: "a", Selector: "b"},
-			flag: direntHostOptional,
+			flag: DirentHostOptional,
 		},
 		{ // Dodgy port is OK with the correct flag
 			in:   "0a\tb\tc\td",

@@ -44,16 +44,22 @@ const (
 	// https://github.com/solderpunk/VF-1/blob/master/vf1.py#L281
 	SSH ItemType = 'S'
 
-	// GopherII:
+	// {{{ GopherII:
+
 	Calendar = 'c'
-	Doc      = 'd'
-	HTML     = 'h'
-	Info     = 'i'
-	Page     = 'p' // e.g.  (TeX; LaTeX; PostScript; Rich Text Format)
-	MBOX     = 'm' // Electronic mail repository (also known as MBOX)
-	Sound    = 's'
-	XML      = 'x'
-	Video    = ';'
+
+	// Word-processing document (MS Word; OpenOffice.org; WordPerfect); PDF document
+	Doc = 'd'
+
+	HTML  = 'h'
+	Info  = 'i'
+	Page  = 'p' // e.g.  (TeX; LaTeX; PostScript; Rich Text Format)
+	MBOX  = 'm' // Electronic mail repository (also known as MBOX)
+	Sound = 's'
+	XML   = 'x'
+	Video = ';'
+
+	// }}}
 
 	MetaError = '-'
 )
