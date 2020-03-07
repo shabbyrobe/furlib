@@ -22,6 +22,7 @@ func NotFound(w ResponseWriter, r *Request) {
 type TextWriter struct {
 	bufw *bufio.Writer
 	last byte
+	n    int
 }
 
 func NewTextWriter(w io.Writer) *TextWriter {
@@ -43,7 +44,7 @@ func (tw *TextWriter) WriteLine(s string) (n int, err error) {
 }
 
 func (tw *TextWriter) Flush() error {
-	if tw.last != '\n' {
+	if tw.n > 0 && tw.last != '\n' {
 		tw.bufw.Write(crlf)
 	}
 	tw.bufw.Write(dotTerminator)
@@ -55,19 +56,29 @@ func (tw *TextWriter) MustFlush() { MustFlush(tw) }
 func (tw *TextWriter) Write(b []byte) (n int, err error) {
 	blen := len(b)
 	s := 0
+
 	for i := 0; i < blen; i++ {
 		if b[i] == '\n' && tw.last != '\r' {
-			if _, err := tw.bufw.Write(b[s:i]); err != nil {
+			wn, err := tw.bufw.Write(b[s:i])
+			if err != nil {
 				return s, err
 			}
-			tw.bufw.Write(crlf)
+			tw.n += wn
+
+			wn, _ = tw.bufw.Write(crlf)
+			tw.n += wn
+
 			s = i + 1
 		}
 		tw.last = b[i]
 	}
-	if _, err := tw.bufw.Write(b[s:]); err != nil {
+
+	wn, err := tw.bufw.Write(b[s:])
+	if err != nil {
 		return blen, err
 	}
+	tw.n += wn
+
 	return blen, nil
 }
 
@@ -80,13 +91,17 @@ type DirWriter struct {
 }
 
 func NewDirWriter(w io.Writer, rq *Request) *DirWriter {
+	return NewDirWriterBuffer(bufio.NewWriter(w), rq)
+}
+
+func NewDirWriterBuffer(w *bufio.Writer, rq *Request) *DirWriter {
 	u := rq.URL()
 	port, err := net.LookupPort("tcp", u.Port)
 	if err != nil {
 		panic(err)
 	}
 	return &DirWriter{
-		bufw: bufio.NewWriter(w),
+		bufw: w,
 		host: u.Hostname,
 		port: strconv.FormatInt(int64(port), 10),
 		base: rq.SelectorPrefix,
