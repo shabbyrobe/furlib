@@ -240,7 +240,7 @@ type serveConn struct {
 func (c *serveConn) serve(ctx context.Context) {
 	defer func() {
 		if err := recover(); err != nil {
-			_, file, line, _ := runtime.Caller(2)
+			_, file, line, _ := runtime.Caller(4)
 			remoteAddr := c.rwc.RemoteAddr().String()
 			c.log.Printf("gopher: panic serving %s at %s:%d: %v\n", remoteAddr, file, line, err)
 		}
