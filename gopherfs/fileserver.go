@@ -240,7 +240,11 @@ func (fsrv *FileServer) handleSelector(selector string) (out string, allowed boo
 	if fsrv.Rewrite != nil {
 		selector, allowed = fsrv.Rewrite(selector)
 	}
-	return path.Clean(selector), allowed
+	out = path.Clean(selector)
+	if out == "." {
+		out = ""
+	}
+	return out, allowed
 }
 
 func (fsrv *FileServer) findItemType(selector string) (item gopher.ItemType, allowed bool) {
